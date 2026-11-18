@@ -1,0 +1,87 @@
+name: Build, Scan & Publish Nettools
+
+on:
+  pull_request:
+    branches: [ "main" ]
+  push:
+    branches: [ "main" ]
+  schedule:
+    # Reconstrucción semanal (Lunes 03:00 UTC) para mantener 0 CVEs con los últimos parches de Wolfi
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+  pull-requests: write
+
+jobs:
+  build-scan-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU (Soporte multi-arquitectura)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build local image for security scan (PR validation)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: uledwin/nettools:scan-test
+
+      - name: Run Trivy vulnerability scanner (Zero-CVE Gate)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'uledwin/nettools:scan-test'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          username: uledwin
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Log in to GitHub Container Registry (GHCR)
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        if: github.event_name != 'pull_request'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            uledwin/nettools
+            ghcr.io/uledwin/nettools
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-
+            type=schedule,pattern={{date 'YYYYMMDD'}}
+
+      - name: Build and push Multi-Arch image (Docker Hub + GHCR) with SBOM
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          sbom: true
+          provenance: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
