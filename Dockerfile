@@ -1,7 +1,9 @@
-# Etapa 1: Compilar crane con dependencias actualizadas
+# Etapa 1: Compilar crane y go-sqlcmd con dependencias actualizadas
 FROM --platform=$BUILDPLATFORM cgr.dev/chainguard/go:latest AS builder
 ARG TARGETOS
 ARG TARGETARCH
+
+# 1. Compilar crane
 WORKDIR /src
 RUN git clone --depth 1 https://github.com/google/go-containerregistry.git . && \
     go get github.com/klauspost/compress@latest && \
@@ -9,11 +11,22 @@ RUN git clone --depth 1 https://github.com/google/go-containerregistry.git . && 
     CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
     go build -mod=mod -trimpath -ldflags="-s -w" -o /crane ./cmd/crane
 
-# Etapa 2: Limpiar la sección .go.buildinfo para evitar el falso positivo en Scout
+# 2. Compilar sqlcmd (Cliente oficial de Microsoft SQL Server en Go)
+WORKDIR /src-sqlcmd
+RUN git clone --depth 1 https://github.com/microsoft/go-sqlcmd.git . && \
+    go get -u ./... && \
+    go mod tidy && \
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
+    go build -mod=mod -trimpath -ldflags="-s -w" -o /sqlcmd ./cmd/modern
+
+# Etapa 2: Limpiar la sección .go.buildinfo de crane y sqlcmd para evitar falsos positivos en Scout/Trivy
 FROM cgr.dev/chainguard/wolfi-base:latest AS stripper
 RUN apk update && apk add --no-cache binutils
 COPY --from=builder /crane /crane
-RUN objcopy --remove-section=.go.buildinfo /crane /crane-clean
+COPY --from=builder /sqlcmd /sqlcmd
+RUN objcopy --remove-section=.go.buildinfo /crane /crane-clean && \
+    objcopy --remove-section=.go.buildinfo /sqlcmd /sqlcmd-clean && \
+    chmod +x /crane-clean /sqlcmd-clean
 
 # Etapa 3: Imagen final Zero-CVE
 FROM cgr.dev/chainguard/wolfi-base:latest
@@ -36,8 +49,11 @@ RUN apk update && apk upgrade --no-cache && \
     socat \
     openssh-client \
     openssl \
-    jq
+    jq \
+    mariadb-client && \
+    ln -sf /usr/bin/mariadb /usr/bin/mysql
 
 COPY --from=stripper /crane-clean /usr/bin/crane
+COPY --from=stripper /sqlcmd-clean /usr/bin/sqlcmd
 
 CMD ["/bin/bash"]
