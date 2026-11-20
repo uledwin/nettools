@@ -97,7 +97,7 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: peter-evans/dockerhub-description@v4
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          username: uledwin
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           repository: uledwin/nettools
           short-description: Zero-CVE Wolfi Linux network troubleshooting, K8s debugging & OCI utility image (amd64/arm64).
