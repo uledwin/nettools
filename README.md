@@ -62,14 +62,19 @@ kubectl debug -it <nombre-del-pod> --image=uledwin/nettools:latest --target=<nom
 
 * **MySQL / MariaDB:**
   ```bash
-  mariadb -h <host-db> -P 3306 -u <usuario> -p -e "SELECT VERSION();"
-  # También disponible mediante el alias:
-  mysql -h <host-db> -P 3306 -u <usuario> -p -e "SELECT VERSION();"
+  # Conexión interactiva (solicita contraseña de forma segura)
+  mariadb -h <host-db> -P 3306 -u <usuario> -p -e "SELECT VERSION() AS db_version, NOW() AS server_time;"
+
+  # Si el servidor interno usa certificados TLS autofirmados (evita ERROR 2026):
+  mariadb --skip-ssl -h <host-db> -P 3306 -u <usuario> -p -e "SHOW DATABASES;"
+
+  # También disponible mediante el alias clásico (si pasas la contraseña por parámetro, escríbela pegada a -p):
+  mysql -h <host-db> -P 3306 -u <usuario> -p -e "SELECT VERSION() AS db_version, NOW() AS server_time;"
   ```
 
 * **Microsoft SQL Server / Azure SQL:**
   ```bash
-  sqlcmd -S <host-db>,1433 -U <usuario> -P '<password>' -C -Q "SELECT @@VERSION;"
+  sqlcmd -S <host-db>,1433 -U <usuario> -P '<password>' -C -Q "SELECT @@VERSION AS sqlserver_version;"
   ```
   *(El flag `-C` confía en el certificado TLS del servidor sin requerir validación de CA raíz).*
 
