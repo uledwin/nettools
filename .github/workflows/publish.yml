@@ -6,8 +6,8 @@ on:
   push:
     branches: [ "main" ]
   schedule:
-    # Reconstrucción semanal (Lunes 03:00 UTC) para mantener 0 CVEs con los últimos parches de Wolfi
-    - cron: '0 3 * * 1'
+    # Reconstrucción semanal (Lunes,Jueves 03:00 UTC) para mantener 0 CVEs con los últimos parches de Wolfi
+    - cron: '0 3 * * 1,4'
   workflow_dispatch:
 
 permissions:
@@ -91,3 +91,14 @@ jobs:
           provenance: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+
+      - name: Update Docker Hub Description
+        if: github.event_name != 'pull_request'
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: uledwin/nettools
+          short-description: Zero-CVE Wolfi Linux network troubleshooting, K8s debugging & OCI utility image (amd64/arm64).
+          readme-filepath: ./README.md
